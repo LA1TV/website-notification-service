@@ -149,6 +149,9 @@ function generateNotificationEvent(eventId, payload) {
 	else if (eventId === "mediaItem.vodAvailable") {
 		generateEvent("New content available!", '"'+payload.name+'" is now available to watch on demand.', payload.url, payload.iconUrl, 86400, "mediaItem.vodAvailable."+payload.id);
 	}
+	else if (eventId === "custom") {
+		generateEvent(payload.title, payload.body, payload.url, payload.iconUrl, payload.ttl || null, payload.tag || null);
+	}
 
 	function generateEvent(title, body, url, iconUrl, ttl, tag) {
 		ttl = ttl || 300;
