@@ -213,7 +213,7 @@ function sendPushNotification(endpoint, payload, ttl) {
 		console.log('Making request to push endpoint "'+endpointUrl+'".');
 		return webPush.sendNotification(endpointUrl, {
 			TTL: ttl,
-			payload: payload,
+			payload: JSON.stringify(payload),
 			userPublicKey: key,
 			userAuth: authSecret,
 		}).then(function() {
