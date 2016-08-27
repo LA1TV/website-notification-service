@@ -25,18 +25,16 @@ else {
 }
 
 var redisClient = null;
-var redisClientNotifications = null;
 var io = null;
 var mysqlCon = null;
 
 // set google api key for push notifications to chrome
 webPush.setGCMAPIKey(config.gcmApiKey);
 
-Promise.all([connectRedis(), connectRedis(), connectMysql(), connectSocketIO()]).then(function(results) {
+Promise.all([connectRedis(), connectMysql(), connectSocketIO()]).then(function(results) {
 	redisClient = results[0];
-	redisClientNotifications = results[1];
-	mysqlCon = results[2];
-	io = results[3];
+	mysqlCon = results[1];
+	io = results[2];
 
 	io.on('connection', function(socket) {
 		console.log('Got a connection.');
@@ -151,8 +149,13 @@ function generateNotificationEvent(eventId, payload) {
 	else if (eventId === "mediaItem.vodAvailable") {
 		generateEvent("New content available!", '"'+payload.name+'" is now available to watch on demand.', payload.url, payload.iconUrl, 86400, "mediaItem.vodAvailable."+payload.id);
 	}
+	else if (eventId === "custom") {
+		generateEvent(payload.title, payload.body, payload.url, payload.iconUrl, payload.ttl || null, payload.tag || null);
+	}
 
 	function generateEvent(title, body, url, iconUrl, ttl, tag) {
+		url = url || null;
+		iconUrl = iconUrl || null;
 		ttl = ttl || 300;
 		tag = tag || null;
 		var payload = {
@@ -191,7 +194,8 @@ function getPushNotificationEndpoints() {
 			resolve(results.map(function(a) {
 				return {
 					url: a.url,
-					sessionId: a.session_id
+					key: a.key,
+					authSecret: a.auth_secret
 				};
 			}));
 		});
@@ -208,58 +212,19 @@ function sendPushNotifications(payload, ttl) {
 
 function sendPushNotification(endpoint, payload, ttl) {
 	return new Promise(function(resolve, reject) {
-		pushNotificationPayloadToRedis(endpoint.sessionId, payload).then(function() {
-			var endpointUrl = endpoint.url;
-			console.log('Making request to push endpoint "'+endpointUrl+'".');
-			return webPush.sendNotification(endpointUrl, ttl).then(function() {
-				console.log('Made request to push endpoint "'+endpointUrl+'".');
-			}).catch(function() {
-				console.log('Request to push endpoint "'+endpointUrl+'" failed for some reason.');
-			});
-		});
-	});
-}
-
-function pushNotificationPayloadToRedis(sessionId, payload) {
-	return new Promise(function(resolve, reject) {
-		var now = Date.now();
-		var data = {
-			time: now,
-			payload: payload
-		};
-
-		var key = "notificationPayloads."+sessionId;
-
-		// notifications will be stored as a js array where each item is {time, payload}, and the key is the session id
-		redisClientNotifications.get(key, function(err, reply) {
-			if (err) {
-				console.log("Error getting pending notifications from redis.");
-				reject();
-			}
-			else {
-				var queuedNotifications = [];
-				if (reply) {
-					// there are alredy notifications stored
-					queuedNotifications = JSON.parse(reply);
-					// don't put notifications back that have expired
-					queuedNotifications = queuedNotifications.filter(function(a) {
-						return a.time >= now - 172800000;
-					});
-				}
-				queuedNotifications.push(data);
-			}
-			// expire in 2 days. Chrome appears to still send push events when devices which were offline come back online
-			// presuming most people will use their device within 2 days
-			redisClientNotifications.set(key, JSON.stringify(queuedNotifications), "EX", 172800, function(err, res) {
-				if (err || res !== "OK") {
-					console.log("Error pushing notification payload to redis.");
-					reject();
-				}
-				else {
-					console.log("Pushed notification payload to redis.");
-					resolve();
-				}
-			});
+		var endpointUrl = endpoint.url;
+		var key = endpoint.key;
+		var authSecret = endpoint.authSecret;
+		console.log('Making request to push endpoint "'+endpointUrl+'".');
+		return webPush.sendNotification(endpointUrl, {
+			TTL: ttl,
+			payload: JSON.stringify(payload),
+			userPublicKey: key,
+			userAuth: authSecret,
+		}).then(function() {
+			console.log('Made request to push endpoint "'+endpointUrl+'".');
+		}).catch(function() {
+			console.log('Request to push endpoint "'+endpointUrl+'" failed for some reason.');
 		});
 	});
 }
