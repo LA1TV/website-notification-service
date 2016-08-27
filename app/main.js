@@ -154,6 +154,8 @@ function generateNotificationEvent(eventId, payload) {
 	}
 
 	function generateEvent(title, body, url, iconUrl, ttl, tag) {
+		url = url || null;
+		iconUrl = iconUrl || null;
 		ttl = ttl || 300;
 		tag = tag || null;
 		var payload = {
